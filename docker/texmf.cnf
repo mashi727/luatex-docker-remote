@@ -1,0 +1,23 @@
+% texmf.cnf for LuaTeX Docker
+% Support for local .sty files
+
+% Search paths
+TEXMFHOME = .:/workspace/texmf:$HOME/texmf:/workspace/.config/luatex/styles
+TEXINPUTS = .:/workspace//:$TEXMFHOME//:
+
+% Specific paths
+TEXINPUTS.latex = .:/workspace//:$TEXMFHOME/tex/latex//:
+TEXINPUTS.lualatex = .:/workspace//:$TEXMFHOME/tex/lualatex//:
+
+% Enable subdirectory searching
+TEXMFDBS = $TEXMFSYSCONFIG;$TEXMFSYSVAR;$TEXMFHOME;.
+
+% Shell escape
+shell_escape = p
+
+% Memory settings for LuaTeX
+main_memory = 12000000
+extra_mem_bot = 12000000
+font_mem_size = 12000000
+pool_size = 12000000
+buf_size = 12000000

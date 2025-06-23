@@ -1,0 +1,25 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{custom-style}[2024/01/01 Custom style example]
+
+\RequirePackage{xcolor}
+\RequirePackage{fontspec}
+\RequirePackage{luacode}
+
+% Custom command
+\newcommand{\highlighttext}[1]{%
+    \colorbox{yellow!30}{\textbf{#1}}%
+}
+
+% Lua function example
+\begin{luacode}
+function count_words(str)
+    local _, count = string.gsub(str, "%S+", "")
+    return count
+end
+\end{luacode}
+
+\newcommand{\wordcount}[1]{%
+    \directlua{tex.print(count_words("#1"))} words%
+}
+
+\endinput
