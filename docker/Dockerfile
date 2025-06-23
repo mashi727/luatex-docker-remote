@@ -19,36 +19,35 @@ WORKDIR /tmp/install-tl
 RUN wget -qO- ${MIRROR}/install-tl-unx.tar.gz | tar xz --strip-components=1
 
 # Installation profile
-RUN cat > texlive.profile << PROFILE && \
-selected_scheme scheme-basic
-TEXDIR /usr/local/texlive/${TEXLIVE_VERSION}
-TEXMFLOCAL /usr/local/texlive/texmf-local
-TEXMFSYSVAR /usr/local/texlive/${TEXLIVE_VERSION}/texmf-var
-TEXMFSYSCONFIG /usr/local/texlive/${TEXLIVE_VERSION}/texmf-config
-TEXMFVAR ~/.texlive${TEXLIVE_VERSION}/texmf-var
-TEXMFCONFIG ~/.texlive${TEXLIVE_VERSION}/texmf-config
-TEXMFHOME ~/texmf
-binary_x86_64-linux 1
-instopt_adjustpath 0
-instopt_adjustrepo 1
-instopt_letter 0
-instopt_portable 0
-instopt_write18_restricted 1
-tlpdbopt_autobackup 0
-tlpdbopt_create_formats 1
-tlpdbopt_desktop_integration 0
-tlpdbopt_file_assocs 0
-tlpdbopt_generate_updmap 0
-tlpdbopt_install_docfiles 0
-tlpdbopt_install_srcfiles 0
-tlpdbopt_post_code 1
-tlpdbopt_w32_multi_user 0
-PROFILE
-    ./install-tl --profile=texlive.profile && \
+RUN echo 'selected_scheme scheme-basic' > texlive.profile && \
+    echo 'TEXDIR /usr/local/texlive/2024' >> texlive.profile && \
+    echo 'TEXMFLOCAL /usr/local/texlive/texmf-local' >> texlive.profile && \
+    echo 'TEXMFSYSVAR /usr/local/texlive/2024/texmf-var' >> texlive.profile && \
+    echo 'TEXMFSYSCONFIG /usr/local/texlive/2024/texmf-config' >> texlive.profile && \
+    echo 'TEXMFVAR ~/.texlive2024/texmf-var' >> texlive.profile && \
+    echo 'TEXMFCONFIG ~/.texlive2024/texmf-config' >> texlive.profile && \
+    echo 'TEXMFHOME ~/texmf' >> texlive.profile && \
+    echo 'binary_x86_64-linux 1' >> texlive.profile && \
+    echo 'instopt_adjustpath 0' >> texlive.profile && \
+    echo 'instopt_adjustrepo 1' >> texlive.profile && \
+    echo 'instopt_letter 0' >> texlive.profile && \
+    echo 'instopt_portable 0' >> texlive.profile && \
+    echo 'instopt_write18_restricted 1' >> texlive.profile && \
+    echo 'tlpdbopt_autobackup 0' >> texlive.profile && \
+    echo 'tlpdbopt_create_formats 1' >> texlive.profile && \
+    echo 'tlpdbopt_desktop_integration 0' >> texlive.profile && \
+    echo 'tlpdbopt_file_assocs 0' >> texlive.profile && \
+    echo 'tlpdbopt_generate_updmap 0' >> texlive.profile && \
+    echo 'tlpdbopt_install_docfiles 0' >> texlive.profile && \
+    echo 'tlpdbopt_install_srcfiles 0' >> texlive.profile && \
+    echo 'tlpdbopt_post_code 1' >> texlive.profile && \
+    echo 'tlpdbopt_w32_multi_user 0' >> texlive.profile
+
+RUN ./install-tl --profile=texlive.profile && \
     cd / && rm -rf /tmp/install-tl
 
 # Install packages
-ENV PATH=/usr/local/texlive/${TEXLIVE_VERSION}/bin/x86_64-linux:$PATH
+ENV PATH=/usr/local/texlive/2024/bin/x86_64-linux:$PATH
 RUN tlmgr install \
     # Core
     luatex \
