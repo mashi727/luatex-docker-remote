@@ -1,5 +1,5 @@
 #!/bin/bash
-# luatex-compile.sh - Remote LuaTeX compilation
+# luatex-compile.sh - Network-aware remote LuaTeX compilation
 
 set -euo pipefail
 
@@ -7,8 +7,73 @@ set -euo pipefail
 CONFIG_FILE="${HOME}/.config/luatex/config"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 
-# Defaults
-REMOTE_HOST="${REMOTE_HOST:-zeus}"
+# Network detection settings
+HOME_GLOBAL_IP_FILE="${HOME}/.home_global_ip"
+SSH_PORT_FILE="${HOME}/.port_for_ssh"
+NETWORK_CONFIG_FILE="${HOME}/.config/luatex/network-config"
+
+# Load network config if exists
+[ -f "$NETWORK_CONFIG_FILE" ] && source "$NETWORK_CONFIG_FILE"
+
+# Function to detect network and set host
+detect_network_and_set_host() {
+    # Check if network detection is enabled
+    if [ "${ENABLE_NETWORK_DETECTION:-true}" != "true" ]; then
+        # Use default host
+        REMOTE_HOST="${REMOTE_HOST:-zeus}"
+        return
+    fi
+    
+    # Check if home IP file exists
+    if [ ! -f "$HOME_GLOBAL_IP_FILE" ]; then
+        # Fallback to default
+        REMOTE_HOST="${REMOTE_HOST:-zeus}"
+        return
+    fi
+    
+    # Get current and home IPs
+    local current_ip=$(curl -s --max-time 5 https://ifconfig.me 2>/dev/null || echo "")
+    local home_ip=$(cat "$HOME_GLOBAL_IP_FILE" 2>/dev/null || echo "")
+    
+    if [ -z "$current_ip" ]; then
+        # Cannot determine current IP, use default
+        warn "Cannot determine current IP, using default host"
+        REMOTE_HOST="${REMOTE_HOST:-zeus}"
+        return
+    fi
+    
+    # Determine host based on network
+    if [ "$current_ip" = "$home_ip" ]; then
+        # At home - use internal hostname
+        REMOTE_HOST="${REMOTE_HOST_INTERNAL:-zeus}"
+        log "Detected home network, using internal host: $REMOTE_HOST"
+    else
+        # Outside - use external hostname
+        REMOTE_HOST="${REMOTE_HOST_EXTERNAL:-zeus-soto}"
+        log "Detected external network, using external host: $REMOTE_HOST"
+    fi
+    
+    # Set SSH port if specified
+    if [ -f "$SSH_PORT_FILE" ] && [ "$REMOTE_HOST" = "${REMOTE_HOST_EXTERNAL:-zeus-soto}" ]; then
+        SSH_PORT=$(cat "$SSH_PORT_FILE")
+        export SSH_OPTIONS="-p $SSH_PORT"
+    fi
+}
+
+# Override SSH command if needed
+ssh_exec() {
+    ssh ${SSH_OPTIONS:-} "${REMOTE_USER}@${REMOTE_HOST}" "$@"
+}
+
+scp_exec() {
+    scp ${SSH_OPTIONS:-} "$@"
+}
+
+rsync_exec() {
+    rsync -e "ssh ${SSH_OPTIONS:-}" "$@"
+}
+
+# Defaults (before network detection)
 REMOTE_USER="${REMOTE_USER:-$USER}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-luatex:latest}"
 CONFIG_DIR="${CONFIG_DIR:-$HOME/.config/luatex}"
@@ -29,17 +94,26 @@ usage() {
 Usage: $(basename "$0") [OPTIONS] <tex-file>
 
 Compile LaTeX with LuaTeX on remote Docker.
+Automatically detects network and switches between internal/external hosts.
 
 Options:
-    -h, --help       Show help
-    -v, --verbose    Verbose output
-    -w, --watch      Watch mode
-    -c, --clean      Clean after compile
-    -k, --keep       Keep auxiliary files
+    -h, --help         Show help
+    -v, --verbose      Verbose output
+    -w, --watch        Watch mode
+    -c, --clean        Clean after compile
+    -k, --keep         Keep auxiliary files
+    -H, --host HOST    Force specific host (overrides auto-detection)
+    --no-auto-detect   Disable automatic network detection
+
+Network Configuration:
+    ~/.home_global_ip     - Your home network's global IP
+    ~/.port_for_ssh       - SSH port for external access
+    ~/.config/luatex/network-config - Network settings
 
 Examples:
     $(basename "$0") document.tex
     $(basename "$0") -w thesis.tex
+    $(basename "$0") -H zeus-internal document.tex
 
 HELP
 }
@@ -50,6 +124,8 @@ WATCH_MODE=false
 CLEAN_AFTER=false
 KEEP_FILES=false
 TEX_FILE=""
+FORCE_HOST=""
+AUTO_DETECT=true
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -73,6 +149,14 @@ while [[ $# -gt 0 ]]; do
             KEEP_FILES=true
             shift
             ;;
+        -H|--host)
+            FORCE_HOST="$2"
+            shift 2
+            ;;
+        --no-auto-detect)
+            AUTO_DETECT=false
+            shift
+            ;;
         *)
             TEX_FILE="$1"
             shift
@@ -92,6 +176,16 @@ if [ ! -f "$TEX_FILE" ]; then
     exit 1
 fi
 
+# Network detection
+if [ -n "$FORCE_HOST" ]; then
+    REMOTE_HOST="$FORCE_HOST"
+    log "Using forced host: $REMOTE_HOST"
+elif [ "$AUTO_DETECT" = true ]; then
+    detect_network_and_set_host
+else
+    REMOTE_HOST="${REMOTE_HOST:-zeus}"
+fi
+
 # File info
 TEX_DIR=$(dirname "$(realpath "$TEX_FILE")")
 TEX_BASE=$(basename "$TEX_FILE" .tex)
@@ -103,19 +197,31 @@ cleanup() {
     if [ "$CLEAN_AFTER" = true ]; then
         rm -f "$TEX_DIR"/*.{aux,log,toc,out,bbl,blg,fls,fdb_latexmk}
     fi
-    ssh "${REMOTE_USER}@${REMOTE_HOST}" "rm -rf '$WORK_DIR'" 2>/dev/null || true
+    ssh_exec "rm -rf '$WORK_DIR'" 2>/dev/null || true
 }
 trap cleanup EXIT
 
+# Test connection
+test_connection() {
+    log "Testing connection to $REMOTE_HOST..."
+    if ! ssh_exec "echo 'Connection OK'" >/dev/null 2>&1; then
+        error "Cannot connect to $REMOTE_HOST"
+        if [ "$AUTO_DETECT" = true ]; then
+            warn "Try using -H option to specify host manually"
+        fi
+        exit 1
+    fi
+}
+
 # Sync files
 sync_files() {
-    log "Syncing files..."
+    log "Syncing files to $REMOTE_HOST..."
     
     # Create remote dir
-    ssh "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p '$WORK_DIR'"
+    ssh_exec "mkdir -p '$WORK_DIR'"
     
     # Sync project files
-    rsync -az \
+    rsync_exec -az \
         --include="*.tex" --include="*.sty" --include="*.cls" \
         --include="*.bib" --include="*.bst" \
         --include="*.png" --include="*.jpg" --include="*.jpeg" --include="*.pdf" \
@@ -125,8 +231,8 @@ sync_files() {
     
     # Sync shared styles
     if [ -d "${CONFIG_DIR}/styles" ]; then
-        ssh "${REMOTE_USER}@${REMOTE_HOST}" "mkdir -p $WORK_DIR/.config/luatex"
-        rsync -az "${CONFIG_DIR}/styles/" \
+        ssh_exec "mkdir -p $WORK_DIR/.config/luatex"
+        rsync_exec -az "${CONFIG_DIR}/styles/" \
             "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/.config/luatex/styles/"
     fi
 }
@@ -147,7 +253,7 @@ compile() {
         cmd="$cmd latexmk -lualatex -quiet '$TEX_NAME'"
     fi
     
-    if ssh "${REMOTE_USER}@${REMOTE_HOST}" "$cmd"; then
+    if ssh_exec "$cmd"; then
         log "Success!"
         return 0
     else
@@ -158,18 +264,18 @@ compile() {
 
 # Get results
 retrieve() {
-    log "Retrieving PDF..."
+    log "Retrieving PDF from $REMOTE_HOST..."
     
-    scp "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/$TEX_BASE.pdf" \
+    scp_exec "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/$TEX_BASE.pdf" \
         "$TEX_DIR/" 2>/dev/null || \
-    scp "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/build/$TEX_BASE.pdf" \
+    scp_exec "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/build/$TEX_BASE.pdf" \
         "$TEX_DIR/" 2>/dev/null || {
         error "Failed to retrieve PDF"
         return 1
     }
     
     if [ "$KEEP_FILES" = true ]; then
-        rsync -az \
+        rsync_exec -az \
             --include="*.aux" --include="*.log" --include="*.toc" \
             --include="*.bbl" --include="*.blg" \
             --exclude="*" \
@@ -180,6 +286,9 @@ retrieve() {
 
 # Main
 main() {
+    # Test connection first
+    test_connection
+    
     if [ "$WATCH_MODE" = true ]; then
         log "Watch mode. Press Ctrl+C to stop."
         while true; do
