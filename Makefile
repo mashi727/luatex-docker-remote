@@ -10,6 +10,7 @@ help:
 	@echo "  make update        - Update installation"
 	@echo "  make uninstall     - Remove environment"
 	@echo "  make build-docker  - Build Docker image on remote"
+	@echo "  make setup-network - Configure network auto-detection"
 	@echo "  make test          - Run tests"
 	@echo "  make clean         - Clean cache files"
 	@echo ""
@@ -17,7 +18,8 @@ help:
 	@echo "  REMOTE_HOST=zeus   - Specify remote host"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make install REMOTE_HOST=myserver"
+	@echo "  make install"
+	@echo "  make setup-network"
 	@echo "  make build-docker"
 
 install:
@@ -28,6 +30,9 @@ update:
 
 uninstall:
 	@scripts/install.sh --uninstall
+
+setup-network:
+	@scripts/setup-network.sh
 
 build-docker:
 	@scripts/build-docker.sh
