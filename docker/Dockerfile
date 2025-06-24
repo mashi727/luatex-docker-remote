@@ -1,147 +1,23 @@
-# LuaTeX Docker image with Japanese support
-FROM debian:bookworm-slim AS builder
+# LuaTeX Docker image based on official TeXLive
+FROM texlive/texlive:latest
 
-ARG TEXLIVE_VERSION=2024
-ARG MIRROR=https://mirror.ctan.org/systems/texlive/tlnet
-
-# Install build dependencies
+# Install additional packages and Japanese fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    perl \
-    perl-modules \
-    wget \
-    xz-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-# TeX Live installation
-WORKDIR /tmp/install-tl
-RUN wget -qO- ${MIRROR}/install-tl-unx.tar.gz | tar xz --strip-components=1
-
-# Installation profile
-RUN echo 'selected_scheme scheme-basic' > texlive.profile && \
-    echo 'TEXDIR /usr/local/texlive/2024' >> texlive.profile && \
-    echo 'TEXMFLOCAL /usr/local/texlive/texmf-local' >> texlive.profile && \
-    echo 'TEXMFSYSVAR /usr/local/texlive/2024/texmf-var' >> texlive.profile && \
-    echo 'TEXMFSYSCONFIG /usr/local/texlive/2024/texmf-config' >> texlive.profile && \
-    echo 'TEXMFVAR ~/.texlive2024/texmf-var' >> texlive.profile && \
-    echo 'TEXMFCONFIG ~/.texlive2024/texmf-config' >> texlive.profile && \
-    echo 'TEXMFHOME ~/texmf' >> texlive.profile && \
-    echo 'binary_x86_64-linux 1' >> texlive.profile && \
-    echo 'instopt_adjustpath 0' >> texlive.profile && \
-    echo 'instopt_adjustrepo 1' >> texlive.profile && \
-    echo 'instopt_letter 0' >> texlive.profile && \
-    echo 'instopt_portable 0' >> texlive.profile && \
-    echo 'instopt_write18_restricted 1' >> texlive.profile && \
-    echo 'tlpdbopt_autobackup 0' >> texlive.profile && \
-    echo 'tlpdbopt_create_formats 1' >> texlive.profile && \
-    echo 'tlpdbopt_desktop_integration 0' >> texlive.profile && \
-    echo 'tlpdbopt_file_assocs 0' >> texlive.profile && \
-    echo 'tlpdbopt_generate_updmap 0' >> texlive.profile && \
-    echo 'tlpdbopt_install_docfiles 0' >> texlive.profile && \
-    echo 'tlpdbopt_install_srcfiles 0' >> texlive.profile && \
-    echo 'tlpdbopt_post_code 1' >> texlive.profile && \
-    echo 'tlpdbopt_w32_multi_user 0' >> texlive.profile
-
-RUN ./install-tl --profile=texlive.profile && \
-    cd / && rm -rf /tmp/install-tl
-
-# Install packages
-ENV PATH=/usr/local/texlive/2024/bin/x86_64-linux:$PATH
-RUN tlmgr install \
-    # Core
-    luatex \
-    luaotfload \
-    luatexbase \
-    luacode \
-    latexmk \
-    # LaTeX
-    latex \
-    latex-bin \
-    latex-fonts \
-    tools \
-    # LuaLaTeX essentials
-    fontspec \
-    unicode-math \
-    microtype \
-    # Japanese
-    luatexja \
-    ltjsclasses \
-    luatexja-preset \
-    luatexja-fontspec \
-    haranoaji \
-    haranoaji-extra \
-    # Graphics
-    graphics \
-    graphics-def \
-    graphicx \
-    xcolor \
-    # Math
-    amsmath \
-    amssymb \
-    amsfonts \
-    mathtools \
-    # Bibliography
-    bibtex \
-    biber \
-    biblatex \
-    # Useful packages
-    hyperref \
-    geometry \
-    enumitem \
-    listings \
-    fancyhdr \
-    # Collections
-    collection-latexrecommended \
-    collection-latexextra \
-    collection-fontsrecommended
-
-# Final stage
-FROM debian:bookworm-slim
-
-# Copy TeX Live
-COPY --from=builder /usr/local/texlive /usr/local/texlive
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    perl \
-    perl-modules \
-    wget \
-    fontconfig \
-    fonts-liberation \
-    fonts-dejavu \
+    # Japanese fonts
     fonts-noto-cjk \
     fonts-noto-cjk-extra \
-    ghostscript \
-    poppler-utils \
-    python3 \
+    # Utilities
     python3-pygments \
-    make \
     && rm -rf /var/lib/apt/lists/*
 
-# Environment
-ENV PATH=/usr/local/texlive/2024/bin/x86_64-linux:$PATH
-ENV TEXMFCACHE=/var/cache/texmf
-ENV TEXMFVAR=/var/cache/texmf-var
+# Update font cache
+RUN fc-cache -fv
 
-# Create directories
-RUN mkdir -p ${TEXMFCACHE} ${TEXMFVAR} && \
-    chmod 1777 ${TEXMFCACHE} ${TEXMFVAR}
-
-# Copy texmf.cnf
-COPY texmf.cnf /usr/local/texlive/2024/texmf.cnf
-
-# Update databases
-RUN mktexlsr && \
-    luaotfload-tool --update --force && \
-    fc-cache -fv
-
-# Create user
-RUN groupadd -g 1000 latex && \
-    useradd -m -u 1000 -g latex -s /bin/bash latex
-
+# Create working directory with proper permissions
 WORKDIR /workspace
-RUN chown -R latex:latex /workspace
+RUN chmod 777 /workspace
 
-USER latex
+# Set environment for .sty file search
+ENV TEXINPUTS=".:/workspace//:/workspace/.config/luatex/styles//:"
+
 CMD ["/bin/bash"]

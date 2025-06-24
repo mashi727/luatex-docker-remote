@@ -60,17 +60,19 @@ make setup-network
 ### Basic Usage
 
 ```bash
-# Compile a document
-luatex-pdf document.tex
+# Compile with different engines
+luatex-pdf document.tex          # LuaLaTeX (default)
+uplatex-pdf document.tex          # upLaTeX
+platex-pdf document.tex           # pLaTeX
+xelatex-pdf document.tex          # XeLaTeX
+pdflatex-pdf document.tex         # pdfLaTeX
 
-# Watch mode (auto-recompile on changes)
-luatex-pdf -w document.tex
+# Or use -e option
+luatex-pdf -e uplatex document.tex
+luatex-pdf -e platex document.tex
 
-# Verbose output with cleanup
-luatex-pdf -v -c document.tex
-
-# Keep auxiliary files
-luatex-pdf -k thesis.tex
+# Watch mode with any engine
+uplatex-pdf -w thesis.tex
 ```
 
 ## Directory Structure

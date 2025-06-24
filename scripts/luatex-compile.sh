@@ -1,5 +1,5 @@
 #!/bin/bash
-# luatex-compile.sh - Network-aware remote LuaTeX compilation
+# luatex-compile.sh - Multi-engine TeX compilation with network awareness
 
 set -euo pipefail
 
@@ -17,50 +17,40 @@ NETWORK_CONFIG_FILE="${HOME}/.config/luatex/network-config"
 
 # Function to detect network and set host
 detect_network_and_set_host() {
-    # Check if network detection is enabled
     if [ "${ENABLE_NETWORK_DETECTION:-true}" != "true" ]; then
-        # Use default host
         REMOTE_HOST="${REMOTE_HOST:-zeus}"
         return
     fi
     
-    # Check if home IP file exists
     if [ ! -f "$HOME_GLOBAL_IP_FILE" ]; then
-        # Fallback to default
         REMOTE_HOST="${REMOTE_HOST:-zeus}"
         return
     fi
     
-    # Get current and home IPs
     local current_ip=$(curl -s --max-time 5 https://ifconfig.me 2>/dev/null || echo "")
     local home_ip=$(cat "$HOME_GLOBAL_IP_FILE" 2>/dev/null || echo "")
     
     if [ -z "$current_ip" ]; then
-        # Cannot determine current IP, use default
         warn "Cannot determine current IP, using default host"
         REMOTE_HOST="${REMOTE_HOST:-zeus}"
         return
     fi
     
-    # Determine host based on network
     if [ "$current_ip" = "$home_ip" ]; then
-        # At home - use internal hostname
         REMOTE_HOST="${REMOTE_HOST_INTERNAL:-zeus}"
         log "Detected home network, using internal host: $REMOTE_HOST"
     else
-        # Outside - use external hostname
         REMOTE_HOST="${REMOTE_HOST_EXTERNAL:-zeus-soto}"
         log "Detected external network, using external host: $REMOTE_HOST"
     fi
     
-    # Set SSH port if specified
     if [ -f "$SSH_PORT_FILE" ] && [ "$REMOTE_HOST" = "${REMOTE_HOST_EXTERNAL:-zeus-soto}" ]; then
         SSH_PORT=$(cat "$SSH_PORT_FILE")
         export SSH_OPTIONS="-p $SSH_PORT"
     fi
 }
 
-# Override SSH command if needed
+# SSH command wrappers
 ssh_exec() {
     ssh ${SSH_OPTIONS:-} "${REMOTE_USER}@${REMOTE_HOST}" "$@"
 }
@@ -73,10 +63,32 @@ rsync_exec() {
     rsync -e "ssh ${SSH_OPTIONS:-}" "$@"
 }
 
-# Defaults (before network detection)
+# Defaults
 REMOTE_USER="${REMOTE_USER:-$USER}"
-DOCKER_IMAGE="${DOCKER_IMAGE:-luatex:latest}"
+DOCKER_IMAGE="${DOCKER_IMAGE:-texlive/texlive:latest}"
 CONFIG_DIR="${CONFIG_DIR:-$HOME/.config/luatex}"
+
+# Auto-detect engine from script name
+SCRIPT_NAME=$(basename "$0")
+case "$SCRIPT_NAME" in
+    uplatex-pdf)
+        DEFAULT_ENGINE="uplatex"
+        ;;
+    platex-pdf)
+        DEFAULT_ENGINE="platex"
+        ;;
+    xelatex-pdf)
+        DEFAULT_ENGINE="xelatex"
+        ;;
+    pdflatex-pdf)
+        DEFAULT_ENGINE="pdflatex"
+        ;;
+    *)
+        DEFAULT_ENGINE="lualatex"
+        ;;
+esac
+
+ENGINE="${DEFAULT_ENGINE}"
 
 # Colors
 GREEN='\033[0;32m'
@@ -84,7 +96,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-log() { echo -e "${GREEN}[LuaTeX]${NC} $*"; }
+log() { echo -e "${GREEN}[$(echo $ENGINE | tr "[:lower:]" "[:upper:]")]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
@@ -93,11 +105,12 @@ usage() {
     cat << HELP
 Usage: $(basename "$0") [OPTIONS] <tex-file>
 
-Compile LaTeX with LuaTeX on remote Docker.
+Compile LaTeX with various engines on remote Docker.
 Automatically detects network and switches between internal/external hosts.
 
 Options:
     -h, --help         Show help
+    -e, --engine       TeX engine (lualatex, uplatex, platex, xelatex, pdflatex)
     -v, --verbose      Verbose output
     -w, --watch        Watch mode
     -c, --clean        Clean after compile
@@ -105,15 +118,17 @@ Options:
     -H, --host HOST    Force specific host (overrides auto-detection)
     --no-auto-detect   Disable automatic network detection
 
-Network Configuration:
-    ~/.home_global_ip     - Your home network's global IP
-    ~/.port_for_ssh       - SSH port for external access
-    ~/.config/luatex/network-config - Network settings
+Supported engines:
+    lualatex   - LuaLaTeX (default, Unicode, modern)
+    uplatex    - upLaTeX (fast, Japanese)
+    platex     - pLaTeX (legacy Japanese)
+    xelatex    - XeLaTeX (Unicode, fonts)
+    pdflatex   - pdfLaTeX (standard)
 
 Examples:
-    $(basename "$0") document.tex
-    $(basename "$0") -w thesis.tex
-    $(basename "$0") -H zeus-internal document.tex
+    $(basename "$0") document.tex                    # LuaLaTeX
+    $(basename "$0") -e uplatex document.tex         # upLaTeX
+    $(basename "$0") -e platex -w document.tex       # pLaTeX with watch
 
 HELP
 }
@@ -132,6 +147,10 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
+            ;;
+        -e|--engine)
+            ENGINE="$2"
+            shift 2
             ;;
         -v|--verbose)
             VERBOSE=true
@@ -176,6 +195,17 @@ if [ ! -f "$TEX_FILE" ]; then
     exit 1
 fi
 
+# Validate engine
+case "$ENGINE" in
+    lualatex|uplatex|platex|xelatex|pdflatex)
+        ;;
+    *)
+        error "Unknown engine: $ENGINE"
+        echo "Supported engines: lualatex, uplatex, platex, xelatex, pdflatex"
+        exit 1
+        ;;
+esac
+
 # Network detection
 if [ -n "$FORCE_HOST" ]; then
     REMOTE_HOST="$FORCE_HOST"
@@ -190,12 +220,12 @@ fi
 TEX_DIR=$(dirname "$(realpath "$TEX_FILE")")
 TEX_BASE=$(basename "$TEX_FILE" .tex)
 TEX_NAME=$(basename "$TEX_FILE")
-WORK_DIR="/tmp/luatex-$$-$(date +%s)"
+WORK_DIR="/tmp/tex-compile-$$-$(date +%s)"
 
 # Cleanup
 cleanup() {
     if [ "$CLEAN_AFTER" = true ]; then
-        rm -f "$TEX_DIR"/*.{aux,log,toc,out,bbl,blg,fls,fdb_latexmk}
+        rm -f "$TEX_DIR"/*.{aux,log,toc,out,bbl,blg,fls,fdb_latexmk,dvi,synctex.gz}
     fi
     ssh_exec "rm -rf '$WORK_DIR'" 2>/dev/null || true
 }
@@ -217,10 +247,8 @@ test_connection() {
 sync_files() {
     log "Syncing files to $REMOTE_HOST..."
     
-    # Create remote dir
     ssh_exec "mkdir -p '$WORK_DIR'"
     
-    # Sync project files
     rsync_exec -az \
         --include="*.tex" --include="*.sty" --include="*.cls" \
         --include="*.bib" --include="*.bst" \
@@ -229,7 +257,6 @@ sync_files() {
         --exclude="*" \
         "$TEX_DIR/" "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/"
     
-    # Sync shared styles
     if [ -d "${CONFIG_DIR}/styles" ]; then
         ssh_exec "mkdir -p $WORK_DIR/.config/luatex"
         rsync_exec -az "${CONFIG_DIR}/styles/" \
@@ -237,9 +264,10 @@ sync_files() {
     fi
 }
 
-# Compile
+# Compile with selected engine
+# Compile with selected engine
 compile() {
-    log "Compiling $TEX_NAME..."
+    log "Compiling $TEX_NAME with $ENGINE..."
     
     local cmd="docker run --rm"
     cmd="$cmd -v '$WORK_DIR:/workspace'"
@@ -247,11 +275,47 @@ compile() {
     cmd="$cmd -e TEXINPUTS='.:/workspace//:/workspace/.config/luatex/styles//:'"
     cmd="$cmd $DOCKER_IMAGE"
     
-    if [ "$VERBOSE" = true ]; then
-        cmd="$cmd latexmk -lualatex -verbose '$TEX_NAME'"
-    else
-        cmd="$cmd latexmk -lualatex -quiet '$TEX_NAME'"
-    fi
+    case "$ENGINE" in
+        lualatex)
+            if [ "$VERBOSE" = true ]; then
+                cmd="$cmd latexmk -lualatex -verbose '$TEX_NAME'"
+            else
+                cmd="$cmd latexmk -lualatex -quiet '$TEX_NAME'"
+            fi
+            ;;
+        uplatex)
+            # Create .latexmkrc for dvipdfmx
+            ssh_exec "echo '\$dvipdf = \"dvipdfmx %O -o %D %S\";' > '$WORK_DIR/.latexmkrc'"
+            if [ "$VERBOSE" = true ]; then
+                cmd="$cmd latexmk -latex='uplatex -synctex=1' -pdfdvi -verbose '$TEX_NAME'"
+            else
+                cmd="$cmd latexmk -latex='uplatex -synctex=1' -pdfdvi -quiet '$TEX_NAME'"
+            fi
+            ;;
+        platex)
+            # Create .latexmkrc for dvipdfmx
+            ssh_exec "echo '\$dvipdf = \"dvipdfmx %O -o %D %S\";' > '$WORK_DIR/.latexmkrc'"
+            if [ "$VERBOSE" = true ]; then
+                cmd="$cmd latexmk -latex='platex -synctex=1' -pdfdvi -verbose '$TEX_NAME'"
+            else
+                cmd="$cmd latexmk -latex='platex -synctex=1' -pdfdvi -quiet '$TEX_NAME'"
+            fi
+            ;;
+        xelatex)
+            if [ "$VERBOSE" = true ]; then
+                cmd="$cmd latexmk -xelatex -verbose '$TEX_NAME'"
+            else
+                cmd="$cmd latexmk -xelatex -quiet '$TEX_NAME'"
+            fi
+            ;;
+        pdflatex)
+            if [ "$VERBOSE" = true ]; then
+                cmd="$cmd latexmk -pdf -verbose '$TEX_NAME'"
+            else
+                cmd="$cmd latexmk -pdf -quiet '$TEX_NAME'"
+            fi
+            ;;
+    esac
     
     if ssh_exec "$cmd"; then
         log "Success!"
@@ -262,31 +326,46 @@ compile() {
     fi
 }
 
+
+
 # Get results
 retrieve() {
     log "Retrieving PDF from $REMOTE_HOST..."
     
-    scp_exec "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/$TEX_BASE.pdf" \
-        "$TEX_DIR/" 2>/dev/null || \
-    scp_exec "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/build/$TEX_BASE.pdf" \
-        "$TEX_DIR/" 2>/dev/null || {
-        error "Failed to retrieve PDF"
-        return 1
-    }
+    # Try first location
+    if scp_exec "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/$TEX_BASE.pdf" \
+        "$TEX_DIR/" 2>/dev/null; then
+        # Success - continue to auxiliary files if needed
+        :
+    elif scp_exec "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/build/$TEX_BASE.pdf" \
+        "$TEX_DIR/" 2>/dev/null; then
+        # Success - continue to auxiliary files if needed
+        :
+    else
+        # Check if PDF was already downloaded (scp shows progress but returns error)
+        if [ ! -f "$TEX_DIR/$TEX_BASE.pdf" ]; then
+            error "Failed to retrieve PDF"
+            return 1
+        fi
+    fi
     
+    # Retrieve auxiliary files if requested
     if [ "$KEEP_FILES" = true ]; then
+        log "Retrieving auxiliary files..."
         rsync_exec -az \
             --include="*.aux" --include="*.log" --include="*.toc" \
-            --include="*.bbl" --include="*.blg" \
+            --include="*.bbl" --include="*.blg" --include="*.synctex.gz" \
+            --include="*.dvi" \
             --exclude="*" \
             "${REMOTE_USER}@${REMOTE_HOST}:$WORK_DIR/" \
-            "$TEX_DIR/"
+            "$TEX_DIR/" 2>/dev/null || true
     fi
+    
+    return 0
 }
 
 # Main
 main() {
-    # Test connection first
     test_connection
     
     if [ "$WATCH_MODE" = true ]; then

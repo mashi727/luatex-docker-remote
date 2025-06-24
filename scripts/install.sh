@@ -163,7 +163,14 @@ install() {
     
     # Install command
     ln -sf "${PROJECT_ROOT}/scripts/luatex-compile.sh" "${INSTALL_PREFIX}/bin/luatex-pdf"
-    
+    # install() 関数の中、luatex-pdf のシンボリックリンク作成後に追加
+    # Create additional engine symlinks
+    log "Creating engine-specific commands..."
+    ln -sf "${PROJECT_ROOT}/scripts/luatex-compile.sh" "${INSTALL_PREFIX}/bin/uplatex-pdf"
+    ln -sf "${PROJECT_ROOT}/scripts/luatex-compile.sh" "${INSTALL_PREFIX}/bin/platex-pdf"
+    ln -sf "${PROJECT_ROOT}/scripts/luatex-compile.sh" "${INSTALL_PREFIX}/bin/xelatex-pdf"
+    ln -sf "${PROJECT_ROOT}/scripts/luatex-compile.sh" "${INSTALL_PREFIX}/bin/pdflatex-pdf"
+
     # Create config
     cat > "${CONFIG_DIR}/config" << CONFIG
 # LuaTeX Docker Configuration
