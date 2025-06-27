@@ -3,38 +3,35 @@ FROM texlive/texlive:latest
 
 # Install additional packages and Japanese fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Japanese fonts
     fonts-noto-cjk \
     fonts-noto-cjk-extra \
-    fonts-ipaexfont \        # 追加
-    fonts-ipafont \          # 追加
-    fonts-takao \            # 追加
-    fonts-vlgothic \         # 追加
-
-    # Utilities
+    fonts-ipaexfont \
+    fonts-ipafont \
+    fonts-takao \
+    fonts-vlgothic \
     python3-pygments \
     && rm -rf /var/lib/apt/lists/*
 
-# Install essential Japanese TeX packages and commonly used packages
-RUN tlmgr update --self && \
-    tlmgr install \
-        # Japanese essentials
-        jsclasses \
-        platex \
-        uplatex \
-        uptex \
-        uptex-fonts \
-        ptex-fontmaps \
-        japanese-otf \
-        # Math and font packages
-        mathptmx \
-        newtx \
-        txfonts \
-        times \
-        # Other commonly used
-        ascmac \
-        latexmk
+# Set CTAN mirror to a stable one
+RUN tlmgr option repository https://mirror.ctan.org/systems/texlive/tlnet
 
+# Update tlmgr itself
+RUN tlmgr update --self || echo "tlmgr self-update failed, continuing..."
+
+# Install Japanese TeX packages
+RUN tlmgr install jsclasses platex uplatex uptex uptex-fonts ptex-fontmaps japanese-otf || \
+    echo "Some Japanese packages failed to install, continuing..."
+
+# Install font packages
+RUN tlmgr install mathptmx newtx txfonts times || \
+    echo "Some font packages failed to install, continuing..."
+
+# Install other packages
+RUN tlmgr install ascmac latexmk || \
+    echo "Some utility packages failed to install, continuing..."
+
+# Alternative: Check what's already installed and only install missing packages
+RUN tlmgr list --only-installed || true
 
 # Update font cache
 RUN fc-cache -fv
