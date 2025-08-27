@@ -1,0 +1,42 @@
+#!/bin/bash
+# Temporary wrapper using SSH config
+
+CONFIG_FILE="$HOME/.config/luatex/config"
+[ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
+
+SSH_HOST="${SSH_HOST:-${1}}"
+shift
+
+if [ -z "$SSH_HOST" ]; then
+    echo "Usage: $0 <ssh-host> <tex-file>"
+    exit 1
+fi
+
+TEX_FILE="${1:-}"
+if [ -z "$TEX_FILE" ] || [ ! -f "$TEX_FILE" ]; then
+    echo "TeX file not found: $TEX_FILE"
+    exit 1
+fi
+
+# Quick compile using SSH
+WORK_DIR="/tmp/tex-$(date +%s)"
+TEX_DIR=$(dirname "$(realpath "$TEX_FILE")")
+TEX_NAME=$(basename "$TEX_FILE")
+TEX_BASE=$(basename "$TEX_FILE" .tex)
+
+echo "Compiling $TEX_NAME on $SSH_HOST..."
+
+# Sync files
+ssh "$SSH_HOST" "mkdir -p $WORK_DIR"
+rsync -az "$TEX_DIR/" "$SSH_HOST:$WORK_DIR/"
+
+# Compile
+ssh "$SSH_HOST" "cd $WORK_DIR && docker run --rm -v $WORK_DIR:/workspace -w /workspace luatex:latest latexmk -lualatex $TEX_NAME"
+
+# Get PDF
+scp "$SSH_HOST:$WORK_DIR/$TEX_BASE.pdf" "$TEX_DIR/"
+
+# Cleanup
+ssh "$SSH_HOST" "rm -rf $WORK_DIR"
+
+echo "Output: $TEX_DIR/$TEX_BASE.pdf"
