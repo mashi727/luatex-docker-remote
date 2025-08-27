@@ -313,6 +313,37 @@ sync_files() {
 compile() {
     log "Compiling $TEX_NAME with $ENGINE on $SSH_HOST..."
     
+    # Check for engine-specific document classes and packages
+    local tex_content=$(cat "$TEX_FILE" 2>/dev/null | head -50)
+    
+    # Detect LuaLaTeX-specific documents
+    if echo "$tex_content" | grep -qE '(\\documentclass.*ltjs|\\usepackage.*luatexja|\\RequirePackage.*luatexja)'; then
+        if [ "$ENGINE" != "lualatex" ]; then
+            warn "This document uses LuaTeX-ja (ltjs*/luatexja) which requires LuaLaTeX"
+            warn "Switching to LuaLaTeX for compilation..."
+            ENGINE="lualatex"
+        fi
+    fi
+    
+    # Detect upLaTeX-specific documents
+    if echo "$tex_content" | grep -qE '(\\documentclass.*ujarticle|\\documentclass.*ujreport|\\documentclass.*ujbook|\\documentclass.*utarticle)'; then
+        if [ "$ENGINE" != "uplatex" ] && [ "$ENGINE" != "lualatex" ]; then
+            warn "This document uses upLaTeX classes (uj*/ut*) which requires upLaTeX"
+            warn "Switching to upLaTeX for compilation..."
+            ENGINE="uplatex"
+        fi
+    fi
+    
+    # Detect pLaTeX-specific documents  
+    if echo "$tex_content" | grep -qE '(\\documentclass.*jarticle|\\documentclass.*jreport|\\documentclass.*jbook|\\documentclass.*tarticle)' && \
+       ! echo "$tex_content" | grep -qE '(\\documentclass.*ltjs|\\documentclass.*uj)'; then
+        if [ "$ENGINE" != "platex" ] && [ "$ENGINE" != "uplatex" ] && [ "$ENGINE" != "lualatex" ]; then
+            warn "This document uses pLaTeX classes (j*/t*) which requires pLaTeX"
+            warn "Switching to pLaTeX for compilation..."
+            ENGINE="platex"
+        fi
+    fi
+    
     # Build latexmk options based on engine
     local latexmk_opts=""
     case "$ENGINE" in
@@ -344,15 +375,64 @@ compile() {
         latexmk_opts="$latexmk_opts -quiet"
     fi
     
+    # Force continue on warnings with -f option
+    latexmk_opts="$latexmk_opts -f"
+    
     # Since we're only copying one tex file now, we can use a simpler approach
     # Just compile the first (and only) .tex file in the directory
     local docker_cmd="cd '$WORK_DIR' && docker run --rm -v '$WORK_DIR:/workspace' -w /workspace -e TEXINPUTS='.:/workspace//:/workspace/.config/luatex/styles//:' ${DOCKER_IMAGE:-luatex:latest} sh -c 'latexmk $latexmk_opts *.tex'"
     
-    if ssh_exec "$docker_cmd"; then
+    # Store compilation result and output
+    local compile_output
+    compile_output=$(ssh_exec "$docker_cmd" 2>&1)
+    local compile_result=$?
+    
+    # Check if PDF was generated regardless of exit code
+    local pdf_exists=false
+    ssh_exec "test -f '$WORK_DIR/$TEX_BASE.pdf'" 2>/dev/null && pdf_exists=true
+    
+    if [ $compile_result -eq 0 ]; then
         log "Compilation successful!"
         return 0
+    elif [ "$pdf_exists" = true ]; then
+        warn "Compilation completed with warnings (PDF was generated)"
+        
+        # Always show warnings summary
+        echo ""
+        info "Analyzing compilation warnings..."
+        
+        # Extract and display warnings from log
+        local warnings=$(ssh_exec "grep -E '(Warning:|LaTeX Warning:|Package .* Warning:)' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -20" || echo "")
+        
+        if [ -n "$warnings" ]; then
+            warn "Found the following warnings:"
+            echo "$warnings" | while IFS= read -r line; do
+                echo "  ${YELLOW}►${NC} $line"
+            done
+            echo ""
+            info "To see full log, use --show-log option"
+        fi
+        
+        # Check for common issues
+        local missing_chars=$(ssh_exec "grep -E 'Missing character:|Font .* does not contain' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -5" || echo "")
+        if [ -n "$missing_chars" ]; then
+            warn "Missing characters or font issues detected:"
+            echo "$missing_chars"
+            info "Consider installing additional fonts or packages"
+            echo ""
+        fi
+        
+        local undefined_refs=$(ssh_exec "grep -E 'Reference .* undefined|Citation .* undefined' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -5" || echo "")
+        if [ -n "$undefined_refs" ]; then
+            warn "Undefined references or citations:"
+            echo "$undefined_refs"
+            info "You may need to run compilation twice or check your references"
+            echo ""
+        fi
+        
+        return 0  # Return success since PDF was generated
     else
-        error "Compilation failed"
+        error "Compilation failed (no PDF generated)"
         
         if [ "$SHOW_LOG" = true ] || [ "$VERBOSE" = true ]; then
             echo ""
