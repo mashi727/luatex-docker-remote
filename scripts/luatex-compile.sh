@@ -11,9 +11,35 @@ NETWORK_CONFIG_FILE="${HOME}/.config/luatex/network-config"
 [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
 [ -f "$NETWORK_CONFIG_FILE" ] && source "$NETWORK_CONFIG_FILE"
 
+# Default to remote mode
+USE_LOCAL_DOCKER="${USE_LOCAL_DOCKER:-false}"
+
+# Check if local Docker is available and should be used
+check_local_docker() {
+    if [ "$USE_LOCAL_DOCKER" = "true" ] || [ "$1" = "local" ]; then
+        if command -v docker >/dev/null 2>&1; then
+            if docker info >/dev/null 2>&1; then
+                return 0  # Local Docker is available
+            else
+                warn "Docker command exists but Docker daemon is not running"
+                return 1
+            fi
+        else
+            warn "Docker is not installed locally"
+            return 1
+        fi
+    fi
+    return 1  # Use remote by default
+}
+
 # SSH host detection
 detect_ssh_host() {
     local force_host="$1"
+    
+    # Skip SSH host detection if using local Docker
+    if [ "$USE_LOCAL" = "true" ]; then
+        return
+    fi
     
     if [ -n "$force_host" ]; then
         SSH_HOST="$force_host"
@@ -155,7 +181,8 @@ Options:
     -w, --watch        Watch mode
     -c, --clean        Clean after compile
     -k, --keep         Keep auxiliary files
-    -H, --host HOST    Force specific host
+    -H, --host HOST    Force specific host (remote mode)
+    -L, --local        Use local Docker instead of remote
     --show-log         Show compilation log on error
     --no-auto-detect   Disable automatic network detection
 
@@ -178,6 +205,7 @@ SHOW_LOG=false
 TEX_FILE=""
 FORCE_HOST=""
 AUTO_DETECT=true
+USE_LOCAL=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -213,6 +241,10 @@ while [[ $# -gt 0 ]]; do
             FORCE_HOST="$2"
             shift 2
             ;;
+        -L|--local)
+            USE_LOCAL=true
+            shift
+            ;;
         --no-auto-detect)
             AUTO_DETECT=false
             shift
@@ -247,8 +279,15 @@ case "$ENGINE" in
         ;;
 esac
 
-# Detect SSH host
-detect_ssh_host "$FORCE_HOST"
+# Check if using local Docker
+if [ "$USE_LOCAL" = "true" ] || check_local_docker "$FORCE_HOST"; then
+    USE_LOCAL=true
+    log "Using local Docker for compilation"
+else
+    USE_LOCAL=false
+    # Detect SSH host only for remote mode
+    detect_ssh_host "$FORCE_HOST"
+fi
 
 # File info
 TEX_DIR=$(dirname "$(realpath "$TEX_FILE")")
@@ -261,57 +300,93 @@ cleanup() {
     if [ "$CLEAN_AFTER" = true ]; then
         rm -f "$TEX_DIR"/*.{aux,log,toc,out,bbl,blg,fls,fdb_latexmk,dvi,synctex.gz}
     fi
-    ssh_exec "rm -rf '$WORK_DIR'" 2>/dev/null || true
+    if [ "$USE_LOCAL" = "true" ]; then
+        rm -rf "$WORK_DIR" 2>/dev/null || true
+    else
+        ssh_exec "rm -rf '$WORK_DIR'" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
 # Test connection
 test_connection() {
-    info "Testing connection to $SSH_HOST..."
-    if ! ssh_exec "echo 'Connection OK'" >/dev/null 2>&1; then
-        error "Cannot connect to $SSH_HOST"
-        if [ "$AUTO_DETECT" = true ]; then
-            warn "Try using -H option to specify host manually"
+    if [ "$USE_LOCAL" = "true" ]; then
+        info "Testing local Docker..."
+        if ! docker info >/dev/null 2>&1; then
+            error "Docker daemon is not running locally"
+            exit 1
         fi
-        exit 1
+    else
+        info "Testing connection to $SSH_HOST..."
+        if ! ssh_exec "echo 'Connection OK'" >/dev/null 2>&1; then
+            error "Cannot connect to $SSH_HOST"
+            if [ "$AUTO_DETECT" = true ]; then
+                warn "Try using -H option to specify host manually"
+            fi
+            exit 1
+        fi
     fi
 }
 
 # Sync files using rsync
 sync_files() {
-    log "Syncing files to $SSH_HOST..."
-    
-    ssh_exec "mkdir -p '$WORK_DIR'"
-    
-    # Create a temporary directory for this specific tex file
-    local temp_sync_dir="/tmp/tex-sync-$"
-    mkdir -p "$temp_sync_dir"
-    
-    # Copy only the target tex file to temp dir
-    cp "$TEX_FILE" "$temp_sync_dir/$TEX_NAME"
-    
-    # Copy supporting files from the original directory
-    for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif; do
-        find "$TEX_DIR" -maxdepth 1 -name "*.$ext" -exec cp {} "$temp_sync_dir/" \; 2>/dev/null || true
-    done
-    
-    # Use rsync to transfer everything from temp dir
-    rsync_exec -az "$temp_sync_dir/" "${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/"
-    
-    # Clean up temp dir
-    rm -rf "$temp_sync_dir"
-    
-    # Sync shared styles if they exist
-    if [ -d "${CONFIG_DIR}/styles" ]; then
-        ssh_exec "mkdir -p $WORK_DIR/.config/luatex/styles"
-        rsync_exec -az "${CONFIG_DIR}/styles/" \
-            "${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/.config/luatex/styles/"
+    if [ "$USE_LOCAL" = "true" ]; then
+        log "Preparing files for local Docker compilation..."
+        
+        mkdir -p "$WORK_DIR"
+        
+        # Copy only the target tex file
+        cp "$TEX_FILE" "$WORK_DIR/$TEX_NAME"
+        
+        # Copy supporting files from the original directory
+        for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif; do
+            find "$TEX_DIR" -maxdepth 1 -name "*.$ext" -exec cp {} "$WORK_DIR/" \; 2>/dev/null || true
+        done
+        
+        # Copy shared styles if they exist
+        if [ -d "${CONFIG_DIR}/styles" ]; then
+            mkdir -p "$WORK_DIR/.config/luatex/styles"
+            cp -r "${CONFIG_DIR}/styles/"* "$WORK_DIR/.config/luatex/styles/" 2>/dev/null || true
+        fi
+    else
+        log "Syncing files to $SSH_HOST..."
+        
+        ssh_exec "mkdir -p '$WORK_DIR'"
+        
+        # Create a temporary directory for this specific tex file
+        local temp_sync_dir="/tmp/tex-sync-$$"
+        mkdir -p "$temp_sync_dir"
+        
+        # Copy only the target tex file to temp dir
+        cp "$TEX_FILE" "$temp_sync_dir/$TEX_NAME"
+        
+        # Copy supporting files from the original directory
+        for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif; do
+            find "$TEX_DIR" -maxdepth 1 -name "*.$ext" -exec cp {} "$temp_sync_dir/" \; 2>/dev/null || true
+        done
+        
+        # Use rsync to transfer everything from temp dir
+        rsync_exec -az "$temp_sync_dir/" "${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/"
+        
+        # Clean up temp dir
+        rm -rf "$temp_sync_dir"
+        
+        # Sync shared styles if they exist
+        if [ -d "${CONFIG_DIR}/styles" ]; then
+            ssh_exec "mkdir -p $WORK_DIR/.config/luatex/styles"
+            rsync_exec -az "${CONFIG_DIR}/styles/" \
+                "${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/.config/luatex/styles/"
+        fi
     fi
 }
 
 # Compile with selected engine using latexmk
 compile() {
-    log "Compiling $TEX_NAME with $ENGINE on $SSH_HOST..."
+    if [ "$USE_LOCAL" = "true" ]; then
+        log "Compiling $TEX_NAME with $ENGINE locally..."
+    else
+        log "Compiling $TEX_NAME with $ENGINE on $SSH_HOST..."
+    fi
     
     # Check for engine-specific document classes and packages
     local tex_content=$(cat "$TEX_FILE" 2>/dev/null | head -50)
@@ -378,18 +453,26 @@ compile() {
     # Force continue on warnings with -f option
     latexmk_opts="$latexmk_opts -f"
     
-    # Since we're only copying one tex file now, we can use a simpler approach
-    # Just compile the first (and only) .tex file in the directory
-    local docker_cmd="cd '$WORK_DIR' && docker run --rm -v '$WORK_DIR:/workspace' -w /workspace -e TEXINPUTS='.:/workspace//:/workspace/.config/luatex/styles//:' ${DOCKER_IMAGE:-luatex:latest} sh -c 'latexmk $latexmk_opts *.tex'"
+    # Build docker command
+    local docker_cmd="docker run --rm -v '$WORK_DIR:/workspace' -w /workspace -e TEXINPUTS='.:/workspace//:/workspace/.config/luatex/styles//:' ${DOCKER_IMAGE:-luatex:latest} sh -c 'latexmk $latexmk_opts *.tex'"
     
     # Store compilation result and output
     local compile_output
-    compile_output=$(ssh_exec "$docker_cmd" 2>&1)
-    local compile_result=$?
-    
-    # Check if PDF was generated regardless of exit code
+    local compile_result
     local pdf_exists=false
-    ssh_exec "test -f '$WORK_DIR/$TEX_BASE.pdf'" 2>/dev/null && pdf_exists=true
+    
+    if [ "$USE_LOCAL" = "true" ]; then
+        # Local Docker compilation
+        compile_output=$(cd "$WORK_DIR" && eval "$docker_cmd" 2>&1)
+        compile_result=$?
+        [ -f "$WORK_DIR/$TEX_BASE.pdf" ] && pdf_exists=true
+    else
+        # Remote Docker compilation
+        local remote_docker_cmd="cd '$WORK_DIR' && $docker_cmd"
+        compile_output=$(ssh_exec "$remote_docker_cmd" 2>&1)
+        compile_result=$?
+        ssh_exec "test -f '$WORK_DIR/$TEX_BASE.pdf'" 2>/dev/null && pdf_exists=true
+    fi
     
     if [ $compile_result -eq 0 ]; then
         log "Compilation successful!"
@@ -402,7 +485,19 @@ compile() {
         info "Analyzing compilation warnings..."
         
         # Extract and display warnings from log
-        local warnings=$(ssh_exec "grep -E '(Warning:|LaTeX Warning:|Package .* Warning:)' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -20" || echo "")
+        local warnings
+        local missing_chars
+        local undefined_refs
+        
+        if [ "$USE_LOCAL" = "true" ]; then
+            warnings=$(grep -E '(Warning:|LaTeX Warning:|Package .* Warning:)' "$WORK_DIR/$TEX_BASE.log" 2>/dev/null | head -20 || echo "")
+            missing_chars=$(grep -E 'Missing character:|Font .* does not contain' "$WORK_DIR/$TEX_BASE.log" 2>/dev/null | head -5 || echo "")
+            undefined_refs=$(grep -E 'Reference .* undefined|Citation .* undefined' "$WORK_DIR/$TEX_BASE.log" 2>/dev/null | head -5 || echo "")
+        else
+            warnings=$(ssh_exec "grep -E '(Warning:|LaTeX Warning:|Package .* Warning:)' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -20" || echo "")
+            missing_chars=$(ssh_exec "grep -E 'Missing character:|Font .* does not contain' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -5" || echo "")
+            undefined_refs=$(ssh_exec "grep -E 'Reference .* undefined|Citation .* undefined' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -5" || echo "")
+        fi
         
         if [ -n "$warnings" ]; then
             warn "Found the following warnings:"
@@ -414,15 +509,12 @@ compile() {
         fi
         
         # Check for common issues
-        local missing_chars=$(ssh_exec "grep -E 'Missing character:|Font .* does not contain' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -5" || echo "")
         if [ -n "$missing_chars" ]; then
             warn "Missing characters or font issues detected:"
             echo "$missing_chars"
             info "Consider installing additional fonts or packages"
             echo ""
         fi
-        
-        local undefined_refs=$(ssh_exec "grep -E 'Reference .* undefined|Citation .* undefined' '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | head -5" || echo "")
         if [ -n "$undefined_refs" ]; then
             warn "Undefined references or citations:"
             echo "$undefined_refs"
@@ -437,7 +529,11 @@ compile() {
         if [ "$SHOW_LOG" = true ] || [ "$VERBOSE" = true ]; then
             echo ""
             warn "Showing compilation log:"
-            ssh_exec "cat '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | tail -50" || true
+            if [ "$USE_LOCAL" = "true" ]; then
+                cat "$WORK_DIR/$TEX_BASE.log" 2>/dev/null | tail -50 || true
+            else
+                ssh_exec "cat '$WORK_DIR/$TEX_BASE.log' 2>/dev/null | tail -50" || true
+            fi
         else
             echo "Run with --show-log to see compilation errors"
         fi
@@ -448,38 +544,59 @@ compile() {
 
 # Get results
 retrieve() {
-    log "Retrieving PDF from $SSH_HOST..."
-    
-    # Build the remote path based on whether we're using SSH config
-    local remote_pdf=""
-    local remote_pdf_build=""
-    
-    if [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
-        # When using SSH config, don't add user@
-        remote_pdf="${SSH_HOST}:$WORK_DIR/$TEX_BASE.pdf"
-        remote_pdf_build="${SSH_HOST}:$WORK_DIR/build/$TEX_BASE.pdf"
-    else
-        # When not using SSH config, add user@
-        remote_pdf="${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/$TEX_BASE.pdf"
-        remote_pdf_build="${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/build/$TEX_BASE.pdf"
-    fi
-    
-    # Try to get PDF with properly quoted paths
-    if scp_exec "$remote_pdf" "$TEX_DIR/" 2>/dev/null; then
-        : # Success
-    elif scp_exec "$remote_pdf_build" "$TEX_DIR/" 2>/dev/null; then
-        : # Success from build directory
-    else
-        if [ ! -f "$TEX_DIR/$TEX_BASE.pdf" ]; then
+    if [ "$USE_LOCAL" = "true" ]; then
+        log "Retrieving PDF from local compilation..."
+        
+        # Copy PDF from work directory to original location
+        if [ -f "$WORK_DIR/$TEX_BASE.pdf" ]; then
+            cp "$WORK_DIR/$TEX_BASE.pdf" "$TEX_DIR/"
+        elif [ -f "$WORK_DIR/build/$TEX_BASE.pdf" ]; then
+            cp "$WORK_DIR/build/$TEX_BASE.pdf" "$TEX_DIR/"
+        else
             error "Failed to retrieve PDF"
             return 1
+        fi
+    else
+        log "Retrieving PDF from $SSH_HOST..."
+        
+        # Build the remote path based on whether we're using SSH config
+        local remote_pdf=""
+        local remote_pdf_build=""
+        
+        if [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
+            # When using SSH config, don't add user@
+            remote_pdf="${SSH_HOST}:$WORK_DIR/$TEX_BASE.pdf"
+            remote_pdf_build="${SSH_HOST}:$WORK_DIR/build/$TEX_BASE.pdf"
+        else
+            # When not using SSH config, add user@
+            remote_pdf="${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/$TEX_BASE.pdf"
+            remote_pdf_build="${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/build/$TEX_BASE.pdf"
+        fi
+        
+        # Try to get PDF with properly quoted paths
+        if scp_exec "$remote_pdf" "$TEX_DIR/" 2>/dev/null; then
+            : # Success
+        elif scp_exec "$remote_pdf_build" "$TEX_DIR/" 2>/dev/null; then
+            : # Success from build directory
+        else
+            if [ ! -f "$TEX_DIR/$TEX_BASE.pdf" ]; then
+                error "Failed to retrieve PDF"
+                return 1
+            fi
         fi
     fi
     
     # Retrieve auxiliary files if requested
     if [ "$KEEP_FILES" = true ]; then
         log "Retrieving auxiliary files..."
-        if [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
+        if [ "$USE_LOCAL" = "true" ]; then
+            # Copy auxiliary files from local work directory
+            for ext in aux log toc bbl blg synctex.gz dvi fls fdb_latexmk; do
+                if [ -f "$WORK_DIR/$TEX_BASE.$ext" ]; then
+                    cp "$WORK_DIR/$TEX_BASE.$ext" "$TEX_DIR/" 2>/dev/null || true
+                fi
+            done
+        elif [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
             rsync_exec -az \
                 --include="*.aux" --include="*.log" --include="*.toc" \
                 --include="*.bbl" --include="*.blg" --include="*.synctex.gz" \

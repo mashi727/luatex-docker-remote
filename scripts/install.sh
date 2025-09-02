@@ -83,24 +83,83 @@ install() {
         fi
     fi
     
-    # SSH configuration method selection
+    # Compilation method selection
     echo ""
-    echo "How do you want to configure SSH authentication?"
+    echo "How do you want to configure LaTeX compilation?"
     echo ""
-    echo "1) Use ~/.ssh/config (recommended for security)"
-    echo "   - Uses SSH key authentication"
-    echo "   - No passwords stored"
-    echo "   - Configured in ~/.ssh/config"
+    echo "1) Remote Docker only (traditional setup)"
+    echo "   - Compile on remote server with Docker"
+    echo "   - Requires SSH access to Docker host"
     echo ""
-    echo "2) Enter remote server credentials"
-    echo "   - Traditional username/host configuration"
-    echo "   - Compatible with existing setups"
-    echo "   - Requires SSH keys to be already configured"
+    echo "2) Local Docker only (local builds)"
+    echo "   - Compile using Docker on this machine"
+    echo "   - Requires Docker to be installed locally"
     echo ""
-    read -p "Enter your choice [1-2]: " ssh_choice
+    echo "3) Both local and remote (flexible)"
+    echo "   - Default to remote, use -L flag for local"
+    echo "   - Best for varying compilation needs"
+    echo ""
+    read -p "Enter your choice [1-3]: " compile_choice
     
-    case "$ssh_choice" in
+    local use_remote=false
+    local use_local=false
+    local ssh_choice=""
+    
+    case "$compile_choice" in
         1)
+            use_remote=true
+            ;;
+        2)
+            use_local=true
+            ;;
+        3)
+            use_remote=true
+            use_local=true
+            ;;
+        *)
+            error "Invalid choice"
+            exit 1
+            ;;
+    esac
+    
+    # Configure remote if selected
+    if [ "$use_remote" = true ]; then
+        echo ""
+        echo "Configure remote Docker host:"
+        echo ""
+        echo "1) Use ~/.ssh/config (recommended for security)"
+        echo "   - Uses SSH key authentication"
+        echo "   - No passwords stored"
+        echo "   - Configured in ~/.ssh/config"
+        echo ""
+        echo "2) Enter remote server credentials"
+        echo "   - Traditional username/host configuration"
+        echo "   - Compatible with existing setups"
+        echo "   - Requires SSH keys to be already configured"
+        echo ""
+        read -p "Enter your choice [1-2]: " ssh_choice
+    fi
+    
+    # Handle local-only configuration
+    if [ "$use_local" = true ] && [ "$use_remote" = false ]; then
+        # Local Docker only configuration
+        cat > "$CONFIG_DIR/config" << EOF
+# LaTeX Docker Remote Compiler Configuration
+# Generated on $(date)
+
+# Local Docker only mode
+USE_LOCAL_DOCKER=true
+
+# Docker image
+DOCKER_IMAGE=luatex:latest
+
+# Config directory
+CONFIG_DIR=$CONFIG_DIR
+EOF
+        log "Local Docker configuration completed"
+    elif [ -n "$ssh_choice" ]; then
+        case "$ssh_choice" in
+            1)
             # SSH config method
             echo ""
             log "Using SSH config for authentication"
@@ -148,6 +207,9 @@ ENABLE_NETWORK_DETECTION=true
 
 # Docker image
 DOCKER_IMAGE=luatex:latest
+
+# Local Docker support
+USE_LOCAL_DOCKER=$use_local
 
 # Config directory
 CONFIG_DIR=$CONFIG_DIR
@@ -199,6 +261,9 @@ ENABLE_NETWORK_DETECTION=true
 # Docker image
 DOCKER_IMAGE=luatex:latest
 
+# Local Docker support
+USE_LOCAL_DOCKER=$use_local
+
 # Config directory
 CONFIG_DIR=$CONFIG_DIR
 EOF
@@ -215,13 +280,14 @@ EOF
             if [[ "$REMOTE_HOST_EXTERNAL" != "$REMOTE_HOST_INTERNAL" ]]; then
                 echo "  ssh-copy-id -p $SSH_PORT_EXTERNAL ${REMOTE_USER}@${REMOTE_HOST_EXTERNAL}"
             fi
-            ;;
-            
-        *)
-            error "Invalid choice"
-            exit 1
-            ;;
-    esac
+                ;;
+                
+            *)
+                error "Invalid choice"
+                exit 1
+                ;;
+        esac
+    fi
     
     # Network detection setup
     echo ""
