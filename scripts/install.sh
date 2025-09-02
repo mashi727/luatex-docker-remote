@@ -321,38 +321,72 @@ EOF
     # Check PATH
     if ! echo "$PATH" | grep -q "$BIN_DIR"; then
         echo ""
-        warn "Add $BIN_DIR to your PATH:"
+        warn "$BIN_DIR is not in your PATH"
         echo ""
-        echo "  # For bash:"
-        echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+        echo "To use the commands, add the following to your shell configuration:"
         echo ""
-        echo "  # For zsh:"
-        echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+        # Detect current shell
+        if [[ "$SHELL" == *"zsh"* ]]; then
+            echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+            echo "  source ~/.zshrc"
+        elif [[ "$SHELL" == *"bash"* ]]; then
+            echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+            echo "  source ~/.bashrc"
+        else
+            echo "  # For bash:"
+            echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+            echo ""
+            echo "  # For zsh:"
+            echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+        fi
         echo ""
+    else
+        log "$BIN_DIR is already in PATH ✓"
     fi
     
-    # Test connection
-    echo ""
-    read -p "Do you want to test the connection now? [Y/n]: " test_conn
-    if [[ ! "$test_conn" =~ ^[Nn]$ ]]; then
+    # Test connection (only for remote configurations)
+    if [ "$use_remote" = true ]; then
         echo ""
-        log "Testing connection..."
-        
-        if [[ "$USE_SSH_CONFIG" == "true" ]]; then
-            # Test with SSH config
-            if ssh "$SSH_HOST_DEFAULT" "echo 'Connection successful!'" 2>/dev/null; then
-                log "Connection to $SSH_HOST_DEFAULT successful!"
+        read -p "Do you want to test the connection now? [Y/n]: " test_conn
+        if [[ ! "$test_conn" =~ ^[Nn]$ ]]; then
+            echo ""
+            log "Testing connection..."
+            
+            if [[ "$USE_SSH_CONFIG" == "true" ]]; then
+                # Test with SSH config
+                if ssh "$SSH_HOST_DEFAULT" "echo 'Connection successful!'" 2>/dev/null; then
+                    log "Connection to $SSH_HOST_DEFAULT successful!"
+                else
+                    error "Connection to $SSH_HOST_DEFAULT failed"
+                    echo "Please check your ~/.ssh/config and SSH keys"
+                fi
             else
-                error "Connection to $SSH_HOST_DEFAULT failed"
-                echo "Please check your ~/.ssh/config and SSH keys"
+                # Test with traditional method
+                if ssh "${REMOTE_USER}@${REMOTE_HOST_INTERNAL}" "echo 'Connection successful!'" 2>/dev/null; then
+                    log "Connection to ${REMOTE_HOST_INTERNAL} successful!"
+                else
+                    error "Connection to ${REMOTE_HOST_INTERNAL} failed"
+                    echo "Please set up SSH keys: ssh-copy-id ${REMOTE_USER}@${REMOTE_HOST_INTERNAL}"
+                fi
             fi
-        else
-            # Test with traditional method
-            if ssh "${REMOTE_USER}@${REMOTE_HOST_INTERNAL}" "echo 'Connection successful!'" 2>/dev/null; then
-                log "Connection to ${REMOTE_HOST_INTERNAL} successful!"
+        fi
+    elif [ "$use_local" = true ] && [ "$use_remote" = false ]; then
+        echo ""
+        read -p "Do you want to test local Docker now? [Y/n]: " test_docker
+        if [[ ! "$test_docker" =~ ^[Nn]$ ]]; then
+            echo ""
+            log "Testing local Docker..."
+            
+            if command -v docker >/dev/null 2>&1; then
+                if docker info >/dev/null 2>&1; then
+                    log "Local Docker is running successfully!"
+                else
+                    warn "Docker is installed but the daemon is not running"
+                    echo "Please start Docker and try again"
+                fi
             else
-                error "Connection to ${REMOTE_HOST_INTERNAL} failed"
-                echo "Please set up SSH keys: ssh-copy-id ${REMOTE_USER}@${REMOTE_HOST_INTERNAL}"
+                error "Docker is not installed"
+                echo "Please install Docker Desktop or Docker Engine"
             fi
         fi
     fi
@@ -361,9 +395,20 @@ EOF
     log "Installation complete!"
     echo ""
     echo "Usage examples:"
-    echo "  luatex-pdf document.tex"
-    echo "  luatex-pdf -H zeus-external document.tex  # Use specific host"
-    echo "  luatex-pdf -v document.tex                 # Verbose output"
+    if [ "$use_local" = true ] && [ "$use_remote" = false ]; then
+        echo "  luatex-pdf document.tex           # Compile with local Docker"
+        echo "  luatex-pdf -v document.tex        # Verbose output"
+        echo "  luatex-pdf -w document.tex        # Watch mode"
+    elif [ "$use_remote" = true ] && [ "$use_local" = false ]; then
+        echo "  luatex-pdf document.tex           # Compile with remote Docker"
+        echo "  luatex-pdf -H zeus-external document.tex  # Use specific host"
+        echo "  luatex-pdf -v document.tex        # Verbose output"
+    else
+        echo "  luatex-pdf document.tex           # Remote Docker (default)"
+        echo "  luatex-pdf -L document.tex        # Local Docker"
+        echo "  luatex-pdf -H zeus-external document.tex  # Specific remote host"
+        echo "  luatex-pdf -v document.tex        # Verbose output"
+    fi
     echo ""
 }
 
