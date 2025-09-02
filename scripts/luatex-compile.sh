@@ -3,6 +3,9 @@
 
 set -euo pipefail
 
+# Initialize USE_LOCAL early to prevent SSH operations in local mode
+USE_LOCAL=false
+
 # Load config
 CONFIG_FILE="${HOME}/.config/luatex/config"
 NETWORK_CONFIG_FILE="${HOME}/.config/luatex/network-config"
@@ -108,6 +111,11 @@ detect_ssh_host() {
 
 # SSH command wrapper
 ssh_exec() {
+    # Skip if in local mode
+    if [ "$USE_LOCAL" = "true" ]; then
+        return 1
+    fi
+    
     if [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
         ssh "$SSH_HOST" "$@"
     else
@@ -117,6 +125,11 @@ ssh_exec() {
 
 # SCP command wrapper - uses uppercase -P for port
 scp_exec() {
+    # Skip if in local mode
+    if [ "$USE_LOCAL" = "true" ]; then
+        return 1
+    fi
+    
     if [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
         scp "$@"
     else
@@ -126,6 +139,11 @@ scp_exec() {
 
 # Rsync command wrapper
 rsync_exec() {
+    # Skip if in local mode
+    if [ "$USE_LOCAL" = "true" ]; then
+        return 1
+    fi
+    
     if [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
         rsync -e "ssh" "$@"
     else
