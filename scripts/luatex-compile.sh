@@ -361,6 +361,13 @@ sync_files() {
             find "$TEX_DIR" -maxdepth 1 -name "*.$ext" -exec cp {} "$WORK_DIR/" \; 2>/dev/null || true
         done
         
+        # Copy common figure/image directories if they exist
+        for dir in figures figure figs fig images image img graphics assets; do
+            if [ -d "$TEX_DIR/$dir" ]; then
+                cp -r "$TEX_DIR/$dir" "$WORK_DIR/"
+            fi
+        done
+        
         # Copy shared styles if they exist
         if [ -d "${CONFIG_DIR}/styles" ]; then
             mkdir -p "$WORK_DIR/.config/luatex/styles"
@@ -381,6 +388,13 @@ sync_files() {
         # Copy supporting files from the original directory
         for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif; do
             find "$TEX_DIR" -maxdepth 1 -name "*.$ext" -exec cp {} "$temp_sync_dir/" \; 2>/dev/null || true
+        done
+        
+        # Copy common figure/image directories if they exist
+        for dir in figures figure figs fig images image img graphics assets; do
+            if [ -d "$TEX_DIR/$dir" ]; then
+                cp -r "$TEX_DIR/$dir" "$temp_sync_dir/"
+            fi
         done
         
         # Use rsync to transfer everything from temp dir
