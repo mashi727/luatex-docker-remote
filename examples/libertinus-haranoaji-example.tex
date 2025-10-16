@@ -1,0 +1,188 @@
+% Libertinus Math + Libertinus Serif + 原ノ味フォント 設定例
+\documentclass[a4paper,12pt]{ltjsarticle}
+
+% LuaLaTeX用フォント設定パッケージ
+\usepackage{luatexja-fontspec}
+\usepackage{amsmath,amssymb}
+\usepackage{unicode-math}  % Unicode数式フォント用
+
+% ====================
+% 欧文フォント設定 (Libertinus)
+% ====================
+\setmainfont{Libertinus Serif}[
+    BoldFont = {Libertinus Serif Bold},
+    ItalicFont = {Libertinus Serif Italic},
+    BoldItalicFont = {Libertinus Serif Bold Italic}
+]
+\setsansfont{Libertinus Sans}[
+    BoldFont = {Libertinus Sans Bold},
+    ItalicFont = {Libertinus Sans Italic}
+]
+\setmonofont{Libertinus Mono}
+
+% ====================
+% 日本語フォント設定 (原ノ味フォント)
+% ====================
+\setmainjfont{HaranoAjiMincho-Regular}[
+    BoldFont = {HaranoAjiGothic-Medium},
+    ItalicFont = {HaranoAjiMincho-Regular},
+    BoldItalicFont = {HaranoAjiGothic-Bold}
+]
+\setsansjfont{HaranoAjiGothic-Regular}[
+    BoldFont = {HaranoAjiGothic-Bold}
+]
+% 原ノ味には専用の等幅フォントがないため、ゴシック体を使用
+\setmonojfont{HaranoAjiGothic-Regular}
+
+% 代替設定（フォント名が異なる場合）
+% \setmainjfont{Harano Aji Mincho}[
+%     BoldFont = {Harano Aji Gothic Medium},
+% ]
+% \setsansjfont{Harano Aji Gothic}[
+%     BoldFont = {Harano Aji Gothic Bold}
+% ]
+
+% ====================
+% 数式フォント設定 (Libertinus Math)
+% ====================
+\setmathfont{Libertinus Math}
+
+% ====================
+% その他の設定
+% ====================
+\usepackage{hyperref}
+\hypersetup{
+    unicode=true,
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=green,
+    urlcolor=red
+}
+
+% 行間の調整（必要に応じて）
+\usepackage{setspace}
+\setstretch{1.1}
+
+\title{Libertinus + 原ノ味フォント 設定例}
+\author{LuaTeX Docker Remote}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{はじめに}
+
+このドキュメントは、\LaTeX{}（Lua\LaTeX{}）において、Libertinus Math、Libertinus Serif、および原ノ味フォント（Harano Aji Fonts）を組み合わせて使用する設定例です。
+
+原ノ味フォントは、Adobe Source Han SerifとSource Han Sansをベースに、\TeX{}向けに最適化された日本語フォントです。
+
+\section{欧文テキスト}
+
+\subsection{通常のテキスト}
+
+This is regular text in Libertinus Serif. \textbf{This is bold text.} \textit{This is italic text.} \textbf{\textit{This is bold italic text.}}
+
+\subsection{サンセリフ体}
+
+\textsf{This is sans-serif text in Libertinus Sans. \textbf{Bold sans-serif.} \textit{Italic sans-serif.}}
+
+\subsection{等幅フォント}
+
+\texttt{This is monospace text in Libertinus Mono. const x = 42;}
+
+\section{日本語テキスト}
+
+\subsection{明朝体とゴシック体}
+
+これは日本語の明朝体（原ノ味明朝）です。\textbf{これは太字のゴシック体（原ノ味ゴシック Medium）です。}
+
+\textsf{これはゴシック体（原ノ味ゴシック）です。\textbf{太字のゴシック体（原ノ味ゴシック Bold）です。}}
+
+\subsection{等幅日本語}
+
+\texttt{これは等幅の日本語フォント（原ノ味ゴシック）です。}
+
+\section{原ノ味フォントの特徴}
+
+原ノ味フォントは以下の特徴を持っています：
+
+\begin{itemize}
+    \item Adobe Source Han フォントをベースにした高品質な字形
+    \item \TeX{}での使用に最適化されたメトリクス
+    \item pTeX/upTeX/LuaTeXなど、各種\TeX{}エンジンで利用可能
+    \item JIS2004字形に対応
+    \item 豊富なウェイトバリエーション
+\end{itemize}
+
+\section{数式}
+
+\subsection{インライン数式}
+
+オイラーの公式: $e^{i\pi} + 1 = 0$
+
+二次方程式の解: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$
+
+\subsection{ディスプレイ数式}
+
+ガウス積分:
+\begin{equation}
+    \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+\end{equation}
+
+テイラー展開:
+\begin{equation}
+    e^x = \sum_{n=0}^{\infty} \frac{x^n}{n!} = 1 + x + \frac{x^2}{2!} + \frac{x^3}{3!} + \cdots
+\end{equation}
+
+行列:
+\begin{equation}
+    \mathbf{A} = \begin{pmatrix}
+        a_{11} & a_{12} & \cdots & a_{1n} \\
+        a_{21} & a_{22} & \cdots & a_{2n} \\
+        \vdots & \vdots & \ddots & \vdots \\
+        a_{m1} & a_{m2} & \cdots & a_{mn}
+    \end{pmatrix}
+\end{equation}
+
+\subsection{数学記号}
+
+集合: $\mathbb{N} \subset \mathbb{Z} \subset \mathbb{Q} \subset \mathbb{R} \subset \mathbb{C}$
+
+論理記号: $\forall x \in \mathbb{R}, \exists y \in \mathbb{R} : x < y$
+
+演算子: $\nabla \cdot \mathbf{F} = \frac{\partial F_x}{\partial x} + \frac{\partial F_y}{\partial y} + \frac{\partial F_z}{\partial z}$
+
+\section{混在テキスト}
+
+日本語と英語の混在: Lua\LaTeX{}は日本語文書作成において、pdflatexよりも優れたUnicodeサポートを提供します。特に、日本語フォント（例：原ノ味フォント）と欧文フォント（例：Libertinus）の組み合わせが容易です。
+
+数式を含む文章: 関数$f(x) = x^2$の導関数は$f'(x) = 2x$であり、これは「にエックス」と読みます。
+
+\section{フォント選択のポイント}
+
+原ノ味フォントとLibertinusの組み合わせは、以下の理由で推奨されます：
+
+\begin{enumerate}
+    \item \textbf{調和性}: 両フォントのx-heightやストロークの太さが良く調和する
+    \item \textbf{可読性}: 学術文書に適した高い可読性を持つ
+    \item \textbf{オープンソース}: 両方ともオープンソースで自由に利用可能
+    \item \textbf{Lua\TeX{}最適化}: 原ノ味フォントは特にLua\TeX{}での使用に最適化されている
+\end{enumerate}
+
+\section{まとめ}
+
+この設定により、以下の組み合わせが実現されています：
+
+\begin{itemize}
+    \item 欧文本文: Libertinus Serif
+    \item 欧文サンセリフ: Libertinus Sans
+    \item 欧文等幅: Libertinus Mono
+    \item 日本語明朝: 原ノ味明朝（HaranoAjiMincho）
+    \item 日本語ゴシック: 原ノ味ゴシック（HaranoAjiGothic）
+    \item 数式: Libertinus Math
+\end{itemize}
+
+これらのフォントは、学術文書や技術文書において優れた可読性と美しい組版を提供します。特に原ノ味フォントは、Lua\TeX{}-jaコミュニティで最も推奨されているフォントの一つです。
+
+\end{document}

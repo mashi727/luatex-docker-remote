@@ -94,6 +94,68 @@ After installation:
 ~/.cache/luatex/            # Cache directory
 ```
 
+## Font Configuration
+
+### Recommended Japanese Fonts
+
+The Docker image includes comprehensive Japanese font support optimized for academic and technical documents:
+
+#### Primary Recommendations
+
+1. **Harano Aji Fonts** (原ノ味フォント) - Most recommended for LuaLaTeX
+   - Based on Adobe Source Han fonts, optimized for TeX
+   - Excellent harmony with Libertinus Math
+   - See `examples/libertinus-haranoaji-example.tex`
+
+2. **Noto CJK Fonts** - Ubuntu default, comprehensive coverage
+   - Google/Adobe collaboration
+   - Complete CJK character support
+   - See `examples/libertinus-noto-example.tex`
+
+3. **IPAex Fonts** - Traditional choice for academic documents
+   - Provided by Japan's Information-technology Promotion Agency
+   - Full JIS X 0213 support
+
+#### Using with Libertinus Math
+
+For mathematical documents, we recommend:
+- **Text**: Libertinus Serif
+- **Sans-serif**: Libertinus Sans
+- **Monospace**: Libertinus Mono
+- **Math**: Libertinus Math
+- **Japanese**: Harano Aji or Noto CJK
+
+Example configuration in your `.tex` file:
+
+```latex
+\usepackage{luatexja-fontspec}
+\usepackage{unicode-math}
+
+% Western fonts
+\setmainfont{Libertinus Serif}
+\setsansfont{Libertinus Sans}
+\setmonofont{Libertinus Mono}
+\setmathfont{Libertinus Math}
+
+% Japanese fonts (Noto CJK)
+\setmainjfont{Noto Serif CJK JP}
+\setsansjfont{Noto Sans CJK JP}
+```
+
+### Available Fonts in Docker Image
+
+The following Japanese fonts are pre-installed:
+- Harano Aji (Mincho/Gothic)
+- Noto CJK (Serif/Sans/Mono)
+- IPA/IPAex (Mincho/Gothic)
+- Takao fonts
+- M+ FONTS
+- Sawarabi (Gothic/Mincho)
+- VL Gothic
+- MigMix
+- Hanazono
+- Ume fonts
+
 ## Custom Styles
 
 ### Project-specific styles

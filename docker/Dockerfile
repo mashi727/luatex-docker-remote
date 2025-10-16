@@ -6,9 +6,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk \
     fonts-noto-cjk-extra \
     fonts-ipaexfont \
+    fonts-ipaexfont-gothic \
+    fonts-ipaexfont-mincho \
     fonts-ipafont \
+    fonts-ipafont-gothic \
+    fonts-ipafont-mincho \
+    fonts-haranoaji \
     fonts-takao \
+    fonts-takao-gothic \
+    fonts-takao-mincho \
+    fonts-takao-pgothic \
     fonts-vlgothic \
+    fonts-mplus \
+    fonts-sawarabi-gothic \
+    fonts-sawarabi-mincho \
+    fonts-horai-umefont \
+    fonts-migmix \
+    fonts-hanazono \
     python3-pygments \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,8 +36,8 @@ RUN tlmgr update --self || echo "tlmgr self-update failed, continuing..."
 RUN tlmgr install jsclasses platex uplatex uptex uptex-fonts ptex-fontmaps japanese-otf || \
     echo "Some Japanese packages failed to install, continuing..."
 
-# Install font packages
-RUN tlmgr install mathptmx newtx txfonts times || \
+# Install font packages (including Libertinus for math)
+RUN tlmgr install mathptmx newtx txfonts times libertinus-fonts libertinus-otf || \
     echo "Some font packages failed to install, continuing..."
 
 # Install other packages

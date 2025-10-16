@@ -1,0 +1,159 @@
+% Libertinus Math + Libertinus Serif + Noto CJK 設定例
+\documentclass[a4paper,12pt]{ltjsarticle}
+
+% LuaLaTeX用フォント設定パッケージ
+\usepackage{luatexja-fontspec}
+\usepackage{amsmath,amssymb}
+\usepackage{unicode-math}  % Unicode数式フォント用
+
+% ====================
+% 欧文フォント設定 (Libertinus)
+% ====================
+\setmainfont{Libertinus Serif}[
+    BoldFont = {Libertinus Serif Bold},
+    ItalicFont = {Libertinus Serif Italic},
+    BoldItalicFont = {Libertinus Serif Bold Italic}
+]
+\setsansfont{Libertinus Sans}[
+    BoldFont = {Libertinus Sans Bold},
+    ItalicFont = {Libertinus Sans Italic}
+]
+\setmonofont{Libertinus Mono}
+
+% ====================
+% 日本語フォント設定 (Noto CJK)
+% ====================
+\setmainjfont{Noto Serif CJK JP}[
+    BoldFont = {Noto Sans CJK JP Bold},
+    ItalicFont = {Noto Serif CJK JP},
+    BoldItalicFont = {Noto Sans CJK JP Bold}
+]
+\setsansjfont{Noto Sans CJK JP}[
+    BoldFont = {Noto Sans CJK JP Bold}
+]
+\setmonojfont{Noto Sans Mono CJK JP}
+
+% ====================
+% 数式フォント設定 (Libertinus Math)
+% ====================
+\setmathfont{Libertinus Math}
+
+% オプション: 特定の数式記号のみ変更する場合
+% \setmathfont{Libertinus Math}[range=\int]
+% \setmathfont{TeX Gyre Pagella Math}[range=\sum]
+
+% ====================
+% その他の設定
+% ====================
+\usepackage{hyperref}
+\hypersetup{
+    unicode=true,
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=green,
+    urlcolor=red
+}
+
+% 行間の調整（必要に応じて）
+\usepackage{setspace}
+\setstretch{1.1}
+
+\title{Libertinus + Noto CJK 設定例}
+\author{LuaTeX Docker Remote}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{はじめに}
+
+このドキュメントは、\LaTeX{}（Lua\LaTeX{}）において、Libertinus Math、Libertinus Serif、およびNoto CJKフォントを組み合わせて使用する設定例です。
+
+\section{欧文テキスト}
+
+\subsection{通常のテキスト}
+
+This is regular text in Libertinus Serif. \textbf{This is bold text.} \textit{This is italic text.} \textbf{\textit{This is bold italic text.}}
+
+\subsection{サンセリフ体}
+
+\textsf{This is sans-serif text in Libertinus Sans. \textbf{Bold sans-serif.} \textit{Italic sans-serif.}}
+
+\subsection{等幅フォント}
+
+\texttt{This is monospace text in Libertinus Mono. const x = 42;}
+
+\section{日本語テキスト}
+
+\subsection{明朝体とゴシック体}
+
+これは日本語の明朝体（Noto Serif CJK JP）です。\textbf{これは太字のゴシック体（Noto Sans CJK JP Bold）です。}
+
+\textsf{これはゴシック体（Noto Sans CJK JP）です。\textbf{太字のゴシック体です。}}
+
+\subsection{等幅日本語}
+
+\texttt{これは等幅の日本語フォント（Noto Sans Mono CJK JP）です。}
+
+\section{数式}
+
+\subsection{インライン数式}
+
+オイラーの公式: $e^{i\pi} + 1 = 0$
+
+二次方程式の解: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$
+
+\subsection{ディスプレイ数式}
+
+ガウス積分:
+\begin{equation}
+    \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+\end{equation}
+
+テイラー展開:
+\begin{equation}
+    e^x = \sum_{n=0}^{\infty} \frac{x^n}{n!} = 1 + x + \frac{x^2}{2!} + \frac{x^3}{3!} + \cdots
+\end{equation}
+
+行列:
+\begin{equation}
+    \mathbf{A} = \begin{pmatrix}
+        a_{11} & a_{12} & \cdots & a_{1n} \\
+        a_{21} & a_{22} & \cdots & a_{2n} \\
+        \vdots & \vdots & \ddots & \vdots \\
+        a_{m1} & a_{m2} & \cdots & a_{mn}
+    \end{pmatrix}
+\end{equation}
+
+\subsection{数学記号}
+
+集合: $\mathbb{N} \subset \mathbb{Z} \subset \mathbb{Q} \subset \mathbb{R} \subset \mathbb{C}$
+
+論理記号: $\forall x \in \mathbb{R}, \exists y \in \mathbb{R} : x < y$
+
+演算子: $\nabla \cdot \mathbf{F} = \frac{\partial F_x}{\partial x} + \frac{\partial F_y}{\partial y} + \frac{\partial F_z}{\partial z}$
+
+\section{混在テキスト}
+
+日本語と英語の混在: Lua\LaTeX{}は日本語文書作成において、pdflatexよりも優れたUnicodeサポートを提供します。特に、日本語フォント（例：Noto CJK）と欧文フォント（例：Libertinus）の組み合わせが容易です。
+
+数式を含む文章: 関数$f(x) = x^2$の導関数は$f'(x) = 2x$であり、これは「にエックス」と読みます。
+
+\section{まとめ}
+
+この設定により、以下の組み合わせが実現されています：
+
+\begin{itemize}
+    \item 欧文本文: Libertinus Serif
+    \item 欧文サンセリフ: Libertinus Sans
+    \item 欧文等幅: Libertinus Mono
+    \item 日本語明朝: Noto Serif CJK JP
+    \item 日本語ゴシック: Noto Sans CJK JP
+    \item 日本語等幅: Noto Sans Mono CJK JP
+    \item 数式: Libertinus Math
+\end{itemize}
+
+これらのフォントは、学術文書や技術文書において優れた可読性と美しい組版を提供します。
+
+\end{document}
