@@ -143,11 +143,22 @@ rsync_exec() {
     if [ "$USE_LOCAL" = "true" ]; then
         return 1
     fi
-    
+
+    # Rsync options for large file transfers
+    local rsync_opts="--timeout=300 --partial --no-whole-file"
+
+    if [ "$VERBOSE" = true ]; then
+        rsync_opts="$rsync_opts --progress"
+        info "rsync command: rsync -e \"ssh ${SSH_OPTIONS:-}\" $rsync_opts $*"
+    fi
+
+    # SSH options for keeping connection alive
+    local ssh_alive_opts="-o ServerAliveInterval=60 -o ServerAliveCountMax=3"
+
     if [ "${USE_SSH_CONFIG:-false}" = "true" ]; then
-        rsync -e "ssh" "$@"
+        rsync -e "ssh $ssh_alive_opts" $rsync_opts "$@"
     else
-        rsync -e "ssh ${SSH_OPTIONS:-}" "$@"  # SSH_OPTIONS for rsync's ssh
+        rsync -e "ssh ${SSH_OPTIONS:-} $ssh_alive_opts" $rsync_opts "$@"
     fi
 }
 
@@ -321,7 +332,12 @@ cleanup() {
     if [ "$USE_LOCAL" = "true" ]; then
         rm -rf "$WORK_DIR" 2>/dev/null || true
     else
-        ssh_exec "rm -rf '$WORK_DIR'" 2>/dev/null || true
+        # Temporarily disable cleanup for debugging
+        if [ "${DEBUG_NO_CLEANUP:-false}" != "true" ]; then
+            ssh_exec "rm -rf '$WORK_DIR'" 2>/dev/null || true
+        else
+            warn "Debug mode: Skipping cleanup of $WORK_DIR on remote"
+        fi
     fi
 }
 trap cleanup EXIT
@@ -357,7 +373,7 @@ sync_files() {
         cp "$TEX_FILE" "$WORK_DIR/$TEX_NAME"
         
         # Copy supporting files from the original directory
-        for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif; do
+        for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif PNG JPG JPEG PDF EPS SVG BMP GIF; do
             find "$TEX_DIR" -maxdepth 1 -name "*.$ext" -exec cp {} "$WORK_DIR/" \; 2>/dev/null || true
         done
         
@@ -386,20 +402,26 @@ sync_files() {
         cp "$TEX_FILE" "$temp_sync_dir/$TEX_NAME"
         
         # Copy supporting files from the original directory
-        for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif; do
+        for ext in sty cls bib bst png jpg jpeg pdf eps svg bmp gif PNG JPG JPEG PDF EPS SVG BMP GIF; do
             find "$TEX_DIR" -maxdepth 1 -name "*.$ext" -exec cp {} "$temp_sync_dir/" \; 2>/dev/null || true
         done
         
         # Copy common figure/image directories if they exist
         for dir in figures figure figs fig images image img graphics assets; do
             if [ -d "$TEX_DIR/$dir" ]; then
+                if [ "$VERBOSE" = true ]; then
+                    info "Copying directory: $TEX_DIR/$dir"
+                fi
                 cp -r "$TEX_DIR/$dir" "$temp_sync_dir/"
+                if [ "$VERBOSE" = true ]; then
+                    info "Files in $temp_sync_dir/$dir: $(ls "$temp_sync_dir/$dir" 2>/dev/null | wc -l)"
+                fi
             fi
         done
         
         # Use rsync to transfer everything from temp dir
         rsync_exec -az "$temp_sync_dir/" "${REMOTE_USER:-$USER}@${SSH_HOST}:$WORK_DIR/"
-        
+
         # Clean up temp dir
         rm -rf "$temp_sync_dir"
         
@@ -486,7 +508,8 @@ compile() {
     latexmk_opts="$latexmk_opts -f"
     
     # Build docker command
-    local docker_cmd="docker run --rm -v '$WORK_DIR:/workspace' -w /workspace -e TEXINPUTS='.:/workspace//:/workspace/.config/luatex/styles//:' ${DOCKER_IMAGE:-luatex:latest} sh -c 'latexmk $latexmk_opts *.tex'"
+    # Include current directory and subdirectories in input paths for both .tex files and images
+    local docker_cmd="docker run --rm -v '$WORK_DIR:/workspace' -w /workspace -e TEXINPUTS='.:/workspace//:/workspace/.config/luatex/styles//:' -e openout_any=a ${DOCKER_IMAGE:-luatex:latest} sh -c 'export TEXINPUTS=\".:/workspace//:/workspace/.config/luatex/styles//:\" && latexmk $latexmk_opts *.tex'"
     
     # Store compilation result and output
     local compile_output
