@@ -26,13 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Install HaranoAji fonts manually (not available in Debian testing)
+# Create symlinks for HaranoAji fonts (use Noto CJK as fallback)
+# HaranoAji is based on Source Han fonts, which Noto CJK is also derived from
 RUN mkdir -p /usr/share/fonts/opentype/haranoaji && \
-    cd /tmp && \
-    wget -q https://github.com/trueroad/HaranoAjiFonts/releases/download/20231009/HaranoAjiMincho-Regular.otf && \
-    wget -q https://github.com/trueroad/HaranoAjiFonts/releases/download/20231009/HaranoAjiGothic-Regular.otf && \
-    mv *.otf /usr/share/fonts/opentype/haranoaji/ && \
-    rm -rf /tmp/*
+    ln -s /usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc /usr/share/fonts/opentype/haranoaji/HaranoAjiMincho-Regular.otf && \
+    ln -s /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc /usr/share/fonts/opentype/haranoaji/HaranoAjiGothic-Regular.otf
 
 # Set CTAN mirror to a stable one
 RUN tlmgr option repository https://mirror.ctan.org/systems/texlive/tlnet
