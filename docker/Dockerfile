@@ -5,6 +5,7 @@ FROM texlive/texlive:latest
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk \
     fonts-noto-cjk-extra \
+    fonts-noto-color-emoji \
     fonts-ipaexfont \
     fonts-ipaexfont-gothic \
     fonts-ipaexfont-mincho \

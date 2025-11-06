@@ -6,6 +6,20 @@ set -euo pipefail
 # Initialize USE_LOCAL early to prevent SSH operations in local mode
 USE_LOCAL=false
 
+# Version
+# Resolve symlink to get actual script location
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+VERSION_FILE="${PROJECT_ROOT}/VERSION"
+VERSION="unknown"
+[ -f "$VERSION_FILE" ] && VERSION=$(cat "$VERSION_FILE" | tr -d '\n')
+
 # Load config
 CONFIG_FILE="${HOME}/.config/luatex/config"
 NETWORK_CONFIG_FILE="${HOME}/.config/luatex/network-config"
@@ -205,6 +219,7 @@ Compile LaTeX with various engines on remote Docker.
 
 Options:
     -h, --help         Show help
+    --version          Show version
     -e, --engine       TeX engine (lualatex, uplatex, platex, xelatex, pdflatex)
     -v, --verbose      Verbose output
     -w, --watch        Watch mode
@@ -240,6 +255,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
             usage
+            exit 0
+            ;;
+        --version)
+            echo "LuaTeX Docker Remote version $VERSION"
             exit 0
             ;;
         -e|--engine)
