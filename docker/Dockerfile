@@ -12,11 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-ipafont \
     fonts-ipafont-gothic \
     fonts-ipafont-mincho \
-    fonts-haranoaji \
     fonts-takao \
     fonts-takao-gothic \
     fonts-takao-mincho \
-    fonts-takao-pgothic \
     fonts-vlgothic \
     fonts-mplus \
     fonts-sawarabi-gothic \
@@ -25,7 +23,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-migmix \
     fonts-hanazono \
     python3-pygments \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Install HaranoAji fonts manually (not available in Debian testing)
+RUN mkdir -p /usr/share/fonts/opentype/haranoaji && \
+    cd /tmp && \
+    wget -q https://github.com/trueroad/HaranoAjiFonts/releases/download/20231009/HaranoAjiMincho-Regular.otf && \
+    wget -q https://github.com/trueroad/HaranoAjiFonts/releases/download/20231009/HaranoAjiGothic-Regular.otf && \
+    mv *.otf /usr/share/fonts/opentype/haranoaji/ && \
+    rm -rf /tmp/*
 
 # Set CTAN mirror to a stable one
 RUN tlmgr option repository https://mirror.ctan.org/systems/texlive/tlnet
