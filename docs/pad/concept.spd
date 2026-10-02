@@ -1,5 +1,5 @@
 Compile LaTeX with no local TeX
-	:comment Problem: keep the local machine clean
+	:comment Challenge: keep the local machine clean
 	:comment Approach: run latexmk in Docker over SSH
 	Set up once
 		$ make install

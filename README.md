@@ -8,7 +8,7 @@ A complete LuaTeX compilation environment using Docker on remote hosts, with ful
 
 ## How it works
 
-What problem this solves and how, as a PAD (Problem Analysis Diagram). See the sections below for details.
+What challenge this addresses and how, as a PAD (Problem Analysis Diagram). See the sections below for details.
 
 <img src="docs/pad/concept.png" alt="Concept PAD. To compile LaTeX with no local TeX, the command picks local Docker or a remote host by network, copies the sources to a temporary directory, runs latexmk in Docker, copies the PDF back, and repeats in watch mode" width="100%">
 
