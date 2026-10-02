@@ -1,0 +1,31 @@
+Compile LaTeX with no local TeX
+	:comment Problem: keep the local machine clean
+	:comment Approach: run latexmk in Docker over SSH
+	Set up once
+		$ make install
+		$ make setup-network (optional)
+		$ make build-docker
+	Run on a .tex file@$ luatex-pdf document.tex
+	Choose where to compile
+		:if Local Docker chosen (-L)?
+			Use the local Docker
+		:else
+			:if Global IP equals home IP?
+				Use the internal host
+			:else
+				Use the external host
+			:comment -H HOST overrides the choice
+	Copy the .tex, styles and figures@to a temporary work directory
+	Compile with latexmk in Docker
+		:if Document class needs another engine?
+			Switch the engine
+		:else
+			Keep the chosen engine (-e)
+	:if PDF produced?
+		Copy the PDF next to the .tex
+	:else
+		Report the failure (--show-log)
+	Remove the temporary work directory
+	:while Watch mode (-w) and a file changed?
+		Sync, compile and retrieve again
+	:terminal PDF beside the source
